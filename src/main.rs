@@ -1,6 +1,10 @@
-
+use dotenv::dotenv;
+use std::env;
 
 fn main() {
-    dotenv::dotenv().ok();
+    dotenv().expect("Failed to read .env file");
+    let db = env::var("db").expect("db not set");
+
+    println!("db: {}", db);
 
 }
