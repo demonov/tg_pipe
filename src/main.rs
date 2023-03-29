@@ -1,46 +1,83 @@
-use dotenv::dotenv;
+use std::cmp::max;
 use std::env;
-use sqlx::{sqlite::SqlitePool, Pool, query};
+use std::error::Error;
 
+use futures_util::{SinkExt, TryStreamExt};
+use log::{debug, error, info, warn};
+use teloxide::prelude::*;
+use teloxide::types::AllowedUpdate::*;
 
-#[derive(Debug, sqlx::FromRow)]
-struct Person {
-    id: i32,
-    name: String,
-    age: i32,
-}
+mod db;
+mod gpt;
+mod tg;
 
 #[tokio::main]
-async fn main() -> Result<(), sqlx::Error> {
-    dotenv().expect("Failed to read .env file");
-    let db = env::var("db").expect("db not set");
-    let url = format!("sqlite:{}", db);
+async fn main() -> Result<(), Box<dyn Error>> {
+    dotenvy::dotenv()?;
+    env_logger::init();
+    info!("Starting...");
 
-    env::set_var("DATABASE_URL", url);
-    let pool = SqlitePool::connect(&url).await?;
+    match run().await {
+        Ok(_) => {
+            info!("Exit");
+            Ok(())
+        },
+        Err(e) => {
+            error!("Stopped with error: {:?}", e);
+            Err(e)
+        }
+    }
+}
 
-    // create a table
-    sqlx::query("CREATE TABLE IF NOT EXISTS people (id INTEGER PRIMARY KEY, name TEXT, age INTEGER)").execute(&pool).await?;
+async fn run() -> Result<(), Box<dyn Error>> {
+    let db = get_env("DB")?;
+    let db = db::Db::new(db).await?;
+    db.migrate().await?;
 
-    // insert some data
-    sqlx::query("INSERT INTO people (name, age) VALUES (?, ?)")
-        .bind("Alice")
-        .bind(25)
-        .execute(&pool)
-        .await?;
+    let gpt = env::var("GPT").map_err(|_| "GPT not set")?;
 
-    sqlx::query("INSERT INTO people (name, age) VALUES (?, ?)")
-        .bind("Bob")
-        .bind(30)
-        .execute(&pool)
-        .await?;
+    let token = env::var("TG_TOKEN").expect("TG_TOKEN not set");
+    let bot = Bot::new(token);
+    let me = bot.get_me().send().await?;
+    println!("I am: {:?}", me);
 
-    // query the data
-    let people: Vec<Person> = query!("SELECT id, name, age FROM people")
-        .fetch_all(&pool)
-        .await?;
+    let mut offset = None;
+    loop {
+        let mut updates = bot.get_updates()
+            .timeout(5)
+            .allowed_updates(vec![Message,
+                                  EditedMessage,
+                                  ChannelPost,
+                                  EditedChannelPost,
+                                  InlineQuery,
+                                  ChosenInlineResult,
+                                  CallbackQuery,
+                                  ShippingQuery,
+                                  PreCheckoutQuery,
+                                  Poll,
+                                  PollAnswer,
+                                  MyChatMember,
+                                  ChatMember,
+                                  ChatJoinRequest, ]);
 
-    println!("{:?}", people);
+        updates.offset = offset;
+
+        println!("requesting updates with offset: {:?}", updates.offset);
+        let mut new_offset = None;
+        for update in updates.send().await? {
+            dbg!(&update);
+
+            new_offset = new_offset.map_or(
+                Some(update.id + 1),
+                |o| Some(max(o, update.id + 1)));
+        }
+        offset = new_offset;
+    }
+
 
     Ok(())
+}
+
+fn get_env(key: &str) -> Result<String, String> {
+    env::var(key).map_err(|_| format!("Couldn't read environment variable '{}'", key))
 }
