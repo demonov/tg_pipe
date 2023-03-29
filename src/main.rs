@@ -7,6 +7,8 @@ use log::{debug, error, info, warn};
 use teloxide::prelude::*;
 use teloxide::types::AllowedUpdate::*;
 
+
+
 mod db;
 mod gpt;
 mod tg;
@@ -34,12 +36,16 @@ async fn run() -> Result<(), Box<dyn Error>> {
     let db = db::Db::new(db).await?;
     db.migrate().await?;
 
-    let gpt = env::var("GPT").map_err(|_| "GPT not set")?;
+    let openai_key = get_env("OPENAI_KEY")?;
+    //let gpt = gpt::Gpt::new("gpt-3.5-turbo".to_string(), openai_key)?;
+    let gpt = gpt::Gpt::new("gpt-4".to_string(), openai_key)?;
+    let response = gpt.query().await?;
+    info!("response: {}", response);
 
-    let token = env::var("TG_TOKEN").expect("TG_TOKEN not set");
+    let token = get_env("TG_TOKEN")?;
     let bot = Bot::new(token);
     let me = bot.get_me().send().await?;
-    println!("I am: {:?}", me);
+    info!("I am: {:?}", me.user);
 
     let mut offset = None;
     loop {
