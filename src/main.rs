@@ -7,8 +7,6 @@ use log::{debug, error, info, warn};
 use teloxide::prelude::*;
 use teloxide::types::AllowedUpdate::*;
 
-
-
 mod db;
 mod gpt;
 mod tg;
@@ -23,7 +21,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         Ok(_) => {
             info!("Exit");
             Ok(())
-        },
+        }
         Err(e) => {
             error!("Stopped with error: {:?}", e);
             Err(e)
@@ -37,8 +35,8 @@ async fn run() -> Result<(), Box<dyn Error>> {
     db.migrate().await?;
 
     let openai_key = get_env("OPENAI_KEY")?;
-    //let gpt = gpt::Gpt::new("gpt-3.5-turbo".to_string(), openai_key)?;
-    let gpt = gpt::Gpt::new("gpt-4".to_string(), openai_key)?;
+    let gpt = gpt::Gpt::new("gpt-3.5-turbo".to_string(), openai_key)?;
+    //let gpt = gpt::Gpt::new("gpt-4".to_string(), openai_key)?;
     let response = gpt.query().await?;
     info!("response: {}", response);
 
@@ -64,11 +62,12 @@ async fn run() -> Result<(), Box<dyn Error>> {
                                   PollAnswer,
                                   MyChatMember,
                                   ChatMember,
-                                  ChatJoinRequest, ]);
+                                  ChatJoinRequest,
+            ]);
 
         updates.offset = offset;
 
-        println!("requesting updates with offset: {:?}", updates.offset);
+        debug!("requesting updates with offset: {:?}", updates.offset);
         let mut new_offset = None;
         for update in updates.send().await? {
             dbg!(&update);
