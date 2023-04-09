@@ -41,9 +41,8 @@ async fn run() -> Result<(), Box<dyn Error>> {
     info!("response: {}", response);
 
     let token = get_env("TG_TOKEN")?;
-    let bot = Bot::new(token);
-    let me = bot.get_me().send().await?;
-    info!("I am: {:?}", me.user);
+    let tgBot = tg::TgBot::new(token).await?;
+
 
     let mut offset = None;
     loop {
