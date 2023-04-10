@@ -1,6 +1,5 @@
 use std::error::Error;
 use openai::chat::{ChatCompletion, ChatCompletionMessage, ChatCompletionMessageRole};
-use sqlx::error::BoxDynError;
 
 pub struct Gpt {
     model: String,

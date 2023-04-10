@@ -1,11 +1,6 @@
-use std::cmp::max;
 use std::env;
 use std::error::Error;
-
-use futures_util::{SinkExt, TryStreamExt};
-use log::{debug, error, info, warn};
-use teloxide::prelude::*;
-use teloxide::types::AllowedUpdate::*;
+use log::{error, info};
 
 mod db;
 mod gpt;
@@ -41,43 +36,10 @@ async fn run() -> Result<(), Box<dyn Error>> {
     info!("response: {}", response);
 
     let token = get_env("TG_TOKEN")?;
-    let tgBot = tg::TgBot::new(token).await?;
+    let timeout = get_env("TG_TIMEOUT").unwrap_or("10".to_string()).parse::<u32>()?;
+    let tg_bot = tg::TgBot::new(token).await?;
 
-
-    let mut offset = None;
-    loop {
-        let mut updates = bot.get_updates()
-            .timeout(5)
-            .allowed_updates(vec![Message,
-                                  EditedMessage,
-                                  ChannelPost,
-                                  EditedChannelPost,
-                                  InlineQuery,
-                                  ChosenInlineResult,
-                                  CallbackQuery,
-                                  ShippingQuery,
-                                  PreCheckoutQuery,
-                                  Poll,
-                                  PollAnswer,
-                                  MyChatMember,
-                                  ChatMember,
-                                  ChatJoinRequest,
-            ]);
-
-        updates.offset = offset;
-
-        debug!("requesting updates with offset: {:?}", updates.offset);
-        let mut new_offset = None;
-        for update in updates.send().await? {
-            dbg!(&update);
-
-            new_offset = new_offset.map_or(
-                Some(update.id + 1),
-                |o| Some(max(o, update.id + 1)));
-        }
-        offset = new_offset;
-    }
-
+    tg_bot.process_messages(timeout).await?;
 
     Ok(())
 }

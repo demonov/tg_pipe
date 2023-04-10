@@ -1,7 +1,6 @@
 use std::env;
 use std::error::Error;
-use sqlx::{Pool, query, sqlite::Sqlite, SqlitePool};
-use sqlx::migrate::MigrateDatabase;
+use sqlx::{Pool, sqlite::Sqlite, SqlitePool};
 
 #[derive(Debug, sqlx::FromRow)]
 struct Chat {
