@@ -28,7 +28,7 @@ impl TgBot {
         let mut offset = None;
         loop {
             let updates = prepare_update_request(&self.bot, timeout, offset);
-            debug!("requesting updates with offset: {:?}, timeout: {}", updates.offset, timeout);
+            debug!("requesting updates with offset: {:?}", updates.offset);
             let mut updates = updates.send().await?;
 
             updates.sort_by_key(|u| u.id);
@@ -39,7 +39,6 @@ impl TgBot {
             }
         }
     }
-
 }
 
 fn prepare_update_request(bot: &Bot, timeout: u32, offset: Option<i32>) -> JsonRequest<GetUpdates> {
