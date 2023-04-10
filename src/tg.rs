@@ -28,23 +28,19 @@ impl TgBot {
         let mut offset = None;
         loop {
             let updates = prepare_update_request(&self.bot, timeout, offset);
-            debug!("requesting updates with offset: {:?}", updates.offset);
+            debug!("requesting updates with offset: {:?}, timeout: {}", updates.offset, timeout);
             let mut updates = updates.send().await?;
 
             updates.sort_by_key(|u| u.id);
-            let mut new_offset = None;
+            offset = updates.last().map_or(None, |u| Some(&u.id + 1));
+
             for update in updates {
                 debug!("Tg update: {:?}", &update);
-
-                new_offset = Some(update.id + 1);
             }
-
-            offset = new_offset;
         }
     }
 
 }
-
 
 fn prepare_update_request(bot: &Bot, timeout: u32, offset: Option<i32>) -> JsonRequest<GetUpdates> {
     let mut request = bot
