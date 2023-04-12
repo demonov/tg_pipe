@@ -1,5 +1,5 @@
 use std::error::Error;
-use log::{debug, info};
+use log::{debug, error, info};
 use teloxide::Bot;
 use teloxide::payloads::GetUpdates;
 use teloxide::prelude::*;
@@ -25,11 +25,19 @@ impl TgBot {
     }
 
     pub async fn process_messages(&self, timeout: u32) -> Result<(), Box<dyn Error>> {
+        let mut stop = false;
         let mut offset = None;
-        loop {
+        while !stop {
             let updates = prepare_update_request(&self.bot, timeout, offset);
             debug!("requesting updates with offset: {:?}", updates.offset);
-            let mut updates = updates.send().await?;
+            let mut updates = match updates.send().await {
+                Ok(updates) => updates,
+                Err(e) => {
+                    error!("Error getting updates: {}", e);
+                    tokio::time::sleep(std::time::Duration::from_secs(timeout as u64)).await;
+                    continue;
+                }
+            };
 
             updates.sort_by_key(|u| u.id);
             offset = updates.last().map_or(None, |u| Some(&u.id + 1));
@@ -38,6 +46,8 @@ impl TgBot {
                 debug!("Tg update: {:?}", &update);
             }
         }
+
+        Ok(())
     }
 }
 
