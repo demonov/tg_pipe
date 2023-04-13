@@ -3,8 +3,8 @@ use std::env;
 use std::error::Error;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use teloxide::types::Update;
 use tokio::sync::mpsc;
+use crate::tg::TgUpdate;
 
 mod db;
 mod gpt;
@@ -41,7 +41,7 @@ async fn run() -> Result<(), Box<dyn Error>> {
     info!("response: {}", response);
     */
 
-    let (tx, rx) = mpsc::channel::<Box<Update>>(32);
+    let (tx, rx) = mpsc::channel::<TgUpdate>(1);
 
     let token = get_env("TG_TOKEN")?;
     let timeout = get_env("TG_TIMEOUT").unwrap_or("10".to_string()).parse::<u32>()?;
@@ -51,21 +51,23 @@ async fn run() -> Result<(), Box<dyn Error>> {
     let exit_condition = Arc::new(AtomicBool::new(false)); //TODO: use cancellation token instead
     futures_util::try_join!(
         get_err(exit_condition.clone()),
-        tg_bot.process_messages(timeout, tx, exit_condition.clone()),
+        tg_bot.pull_updates(timeout, tx, exit_condition.clone()),
         process_messages(rx, db, exit_condition.clone()),
     )?;
 
     Ok(())
 }
 
-async fn process_messages(mut rx: mpsc::Receiver<Box<Update>>, db: db::Db, exit_condition: Arc<AtomicBool>) -> Result<(), Box<dyn Error>> {
-    while !exit_condition.load(Ordering::SeqCst) {
-        let update = rx.recv().await;
-        match update {
-            Some(update) => {
-                debug!("Update: {:?}", update);
-                db.save_update(update).await?;
+async fn process_messages(mut rx: mpsc::Receiver<TgUpdate>, db: db::Db, exit_trigger: Arc<AtomicBool>) -> Result<(), Box<dyn Error>> {
+    loop {
+        match rx.recv().await {
+            Some(tg_update) => {
+                db.save_updates(&tg_update.updates).await?;
 
+                for update in tg_update.updates {
+                    debug!("Update: {:?}", update);
+
+                }
             }
             None => {
                 info!("Channel closed");
@@ -74,6 +76,7 @@ async fn process_messages(mut rx: mpsc::Receiver<Box<Update>>, db: db::Db, exit_
         }
     }
 
+    info!("processing messages stopped");
     Ok(())
 }
 

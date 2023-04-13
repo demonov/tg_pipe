@@ -1,5 +1,7 @@
 use std::error::Error;
 use sqlx::{Pool, sqlite::Sqlite, SqlitePool};
+use teloxide::prelude::*;
+use teloxide::types::UpdateKind;
 
 #[derive(Debug, sqlx::FromRow)]
 struct Chat {
@@ -35,49 +37,52 @@ impl Db {
 
         sqlx::query(
             "CREATE TABLE IF NOT EXISTS messages \
-                (id INTEGER PRIMARY KEY, text TEXT, chat_id INTEGER, user_id INTEGER)")
+                (id INTEGER PRIMARY KEY, chat_id INTEGER, from_id INTEGER, content TEXT, raw TEXT)")
             .execute(&self.pool)
             .await?;
 
         Ok(())
     }
+
+    pub async fn save_updates(&self, updates: &Vec<Update>) -> Result<(), Box<dyn Error>> {
+        for update in updates {
+            let (id, chat_id, from_id, content, raw) = parse_update(update);
+
+
+                sqlx::query("INSERT INTO messages (id, chat_id, from_id, content, raw) VALUES (?, ?, ?, ?, ?)")
+                    .bind(id)
+                    .bind(chat_id)
+                    .bind(from_id)
+                    .bind(content)
+                    .bind(raw)
+                    .execute(&self.pool)
+                    .await?;
+        }
+
+        Ok(())
+    }
 }
 
-/*
-// create a table
+fn parse_update(update: &Update) -> (i32, i64, Option<u64>, String, String) {
+    let id = update.id;
+    let chat_id;
+    let from_id;
+    let content;
+    let raw = serde_json::to_string(update).unwrap_or("".to_string());
 
-// insert some data
-sqlx::query("INSERT INTO people (name, age) VALUES (?, ?)")
-    .bind("Alice")
-    .bind(25)
-    .execute(&pool)
-    .await?;
+    match &update.kind {
+        UpdateKind::Message(message) => {
+            chat_id = message.chat.id.0;
+            from_id = message.from().map_or(None, |user| Some(user.id.0));
+            content = message.text().unwrap_or("").to_string();
+        }
+        //TODO: handle other update kinds
+        _ => {
+            chat_id = 0;
+            from_id = None;
+            content = "".to_string();
+        }
+    }
 
-sqlx::query("INSERT INTO people (name, age) VALUES (?, ?)")
-    .bind("Bob")
-    .bind(30)
-    .execute(&pool)
-    .await?;
-
-// query the data
-let mut people = sqlx::query("SELECT id, name, age FROM people")
-    .fetch(&pool);
-
-// while let Some(row) = people.try_next().await? {
-//     let person = Person {
-//         id: row.get(0),
-//         name: row.get(1),
-//         age: row.get(2),
-//     };
-//
-//     println!("Found person {:?}", person);
-// }
-
-let mut stream = sqlx::query_as::<_, Person>("SELECT id, name, age FROM people")
-    .fetch(&pool);
-
-use futures_util::TryStreamExt;
-while let Some(person) = stream.try_next().await? {
-    println!("Found person {:?}", person);
+    (id, chat_id, from_id, content, raw)
 }
-*/
