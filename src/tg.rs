@@ -1,11 +1,14 @@
-use std::error::Error;
 use log::{debug, error, info};
+use std::error::Error;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use teloxide::Bot;
 use teloxide::payloads::GetUpdates;
 use teloxide::prelude::*;
 use teloxide::requests::JsonRequest;
 use teloxide::types::AllowedUpdate::*;
 use teloxide::types::Me;
+use tokio::sync::mpsc::Sender;
 
 pub struct TgBot {
     bot: Bot,
@@ -24,10 +27,9 @@ impl TgBot {
         })
     }
 
-    pub async fn process_messages(&self, timeout: u32) -> Result<(), Box<dyn Error>> {
-        let mut stop = false;
+    pub async fn process_messages(&self, timeout: u32, sender: Sender<Box<Update>>, exit_condition: Arc<AtomicBool>) -> Result<(), Box<dyn Error>> {
         let mut offset = None;
-        while !stop {
+        while !exit_condition.load(Ordering::SeqCst) {
             let updates = prepare_update_request(&self.bot, timeout, offset);
             debug!("requesting updates with offset: {:?}", updates.offset);
             let mut updates = match updates.send().await {
@@ -44,6 +46,7 @@ impl TgBot {
 
             for update in updates {
                 debug!("Tg update: {:?}", &update);
+                sender.send(Box::new(update)).await?;
             }
         }
 

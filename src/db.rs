@@ -1,4 +1,3 @@
-use std::env;
 use std::error::Error;
 use sqlx::{Pool, sqlite::Sqlite, SqlitePool};
 
@@ -23,7 +22,7 @@ pub struct Db {
 impl Db {
     pub async fn new(url: String) -> Result<Self, Box<dyn Error>> {
         let url = format!("sqlite://{}", url);
-        env::set_var("DATABASE_URL", &url);
+        //std::env::set_var("DATABASE_URL", &url);
         let pool = SqlitePool::connect(&url).await?;
 
         Ok(Self { pool })
@@ -45,10 +44,7 @@ impl Db {
 }
 
 /*
-
-
 // create a table
-
 
 // insert some data
 sqlx::query("INSERT INTO people (name, age) VALUES (?, ?)")
