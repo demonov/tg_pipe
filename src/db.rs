@@ -37,7 +37,7 @@ impl Db {
 
         sqlx::query(
             "CREATE TABLE IF NOT EXISTS messages \
-                (id INTEGER PRIMARY KEY, chat_id INTEGER, from_id INTEGER, content TEXT, raw TEXT)")
+                (id INTEGER PRIMARY KEY, chat_id INTEGER, from_id TEXT, content TEXT, raw TEXT)")
             .execute(&self.pool)
             .await?;
 
@@ -63,24 +63,24 @@ impl Db {
     }
 }
 
-fn parse_update(update: &Update) -> (i32, i64, Option<u64>, String, String) {
+fn parse_update(update: &Update) -> (i32, i64, Option<String>, Option<String>, Option<String>) {
     let id = update.id;
     let chat_id;
     let from_id;
     let content;
-    let raw = serde_json::to_string(update).unwrap_or("".to_string());
+    let raw = None;//serde_json::to_string(update).unwrap_or("".to_string());
 
     match &update.kind {
         UpdateKind::Message(message) => {
             chat_id = message.chat.id.0;
-            from_id = message.from().map_or(None, |user| Some(user.id.0));
-            content = message.text().unwrap_or("").to_string();
+            from_id = message.from().map_or(None, |user| Some(user.id.0.to_string()));
+            content = message.text().map_or(None, |text| Some(text.to_string()));
         }
         //TODO: handle other update kinds
         _ => {
             chat_id = 0;
             from_id = None;
-            content = "".to_string();
+            content = None;
         }
     }
 

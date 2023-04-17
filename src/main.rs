@@ -66,7 +66,6 @@ async fn process_messages(mut rx: mpsc::Receiver<TgUpdate>, db: db::Db, exit_tri
 
                 for update in tg_update.updates {
                     debug!("Update: {:?}", update);
-
                 }
             }
             None => {

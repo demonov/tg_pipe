@@ -70,7 +70,7 @@ impl TgUpdate {
         }, rx)
     }
 
-    pub fn done_processing(&self) {
+    pub fn done_processing(mut self) {
         match self.new_offset_sender.send(self.new_offset_value) {
             Ok(_) => (),
             Err(e) => error!("Error sending new offset: {:?}", e),
