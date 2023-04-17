@@ -6,12 +6,10 @@ use teloxide::payloads::GetUpdates;
 use teloxide::prelude::*;
 use teloxide::requests::JsonRequest;
 use teloxide::types::AllowedUpdate::*;
-use teloxide::types::Me;
 use tokio::sync::{mpsc, oneshot};
 
 pub struct TgBot {
     bot: Bot,
-    me: Me,
 }
 
 impl TgBot {
@@ -22,7 +20,6 @@ impl TgBot {
 
         Ok(Self {
             bot,
-            me,
         })
     }
 
@@ -70,7 +67,7 @@ impl TgUpdate {
         }, rx)
     }
 
-    pub fn done_processing(mut self) {
+    pub fn done_processing(self) {
         match self.new_offset_sender.send(self.new_offset_value) {
             Ok(_) => (),
             Err(e) => error!("Error sending new offset: {:?}", e),

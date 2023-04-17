@@ -48,7 +48,6 @@ impl Db {
         for update in updates {
             let (id, chat_id, from_id, content, raw) = parse_update(update);
 
-
                 sqlx::query("INSERT INTO messages (id, chat_id, from_id, content, raw) VALUES (?, ?, ?, ?, ?)")
                     .bind(id)
                     .bind(chat_id)

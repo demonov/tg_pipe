@@ -2,7 +2,7 @@ use log::{debug, error, info};
 use std::env;
 use std::error::Error;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::AtomicBool;
 use tokio::sync::mpsc;
 use crate::tg::TgUpdate;
 
@@ -50,7 +50,6 @@ async fn run() -> Result<(), Box<dyn Error>> {
 
     let exit_condition = Arc::new(AtomicBool::new(false)); //TODO: use cancellation token instead
     futures_util::try_join!(
-        get_err(exit_condition.clone()),
         tg_bot.pull_updates(timeout, tx, exit_condition.clone()),
         process_messages(rx, db, exit_condition.clone()),
     )?;
@@ -64,9 +63,11 @@ async fn process_messages(mut rx: mpsc::Receiver<TgUpdate>, db: db::Db, exit_tri
             Some(tg_update) => {
                 db.save_updates(&tg_update.updates).await?;
 
-                for update in tg_update.updates {
+                for update in &tg_update.updates {
                     debug!("Update: {:?}", update);
                 }
+
+                tg_update.done_processing();
             }
             None => {
                 info!("Channel closed");
@@ -81,11 +82,4 @@ async fn process_messages(mut rx: mpsc::Receiver<TgUpdate>, db: db::Db, exit_tri
 
 fn get_env(key: &str) -> Result<String, String> {
     env::var(key).map_err(|_| format!("Couldn't read environment variable '{}'", key))
-}
-
-async fn get_err(exit_trigger: Arc<AtomicBool>) -> Result<(), Box<dyn Error>> {
-    tokio::time::sleep(std::time::Duration::from_secs(15)).await;
-    //Err(Box::try_from("BOOM".to_string()).unwrap())
-    exit_trigger.store(true, Ordering::SeqCst);
-    Ok(())
 }
