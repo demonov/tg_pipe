@@ -3,8 +3,8 @@ use std::env;
 use std::error::Error;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
-use tokio::sync::mpsc;
-use crate::tg::TgUpdate;
+use crate::db::Db;
+use crate::tg::TgBot;
 
 mod db;
 mod gpt;
@@ -41,37 +41,40 @@ async fn run() -> Result<(), Box<dyn Error>> {
     info!("response: {}", response);
     */
 
-    let (tx, rx) = mpsc::channel::<TgUpdate>(1);
-
     let token = get_env("TG_TOKEN")?;
-    let timeout = get_env("TG_TIMEOUT").unwrap_or("10".to_string()).parse::<u32>()?;
-    info!("Telegram long polling timeout has been set to {} seconds", timeout);
-    let tg_bot = tg::TgBot::new(token).await?;
+    let tg_lp_timeout = get_env("TG_LONGPOOL_TIMEOUT").unwrap_or("10".to_string()).parse::<u32>()?;
+    info!("Telegram long polling timeout has been set to {} seconds", tg_lp_timeout);
+    let tg_retry_timeout = get_env("TG_RETRY_TIMEOUT").unwrap_or("5".to_string()).parse::<u64>()?;
+    info!("Telegram retry timeout has been set to {} seconds", tg_retry_timeout);
+    let tg_bot = tg::TgBot::new(token, tg_lp_timeout, tg_retry_timeout).await?;
 
     let exit_condition = Arc::new(AtomicBool::new(false)); //TODO: use cancellation token instead
     futures_util::try_join!(
-        tg_bot.pull_updates(timeout, tx, exit_condition.clone()),
-        process_messages(rx, db, exit_condition.clone()),
+        // tg_bot.pull_updates(tg_lp_timeout, tx, exit_condition.clone()),
+        process_messages(tg_bot, db, exit_condition.clone()),
     )?;
 
     Ok(())
 }
 
-async fn process_messages(mut rx: mpsc::Receiver<TgUpdate>, db: db::Db, exit_trigger: Arc<AtomicBool>) -> Result<(), Box<dyn Error>> {
-    loop {
-        match rx.recv().await {
-            Some(tg_update) => {
-                db.save_updates(&tg_update.updates).await?;
+async fn process_messages(tg_bot: TgBot, db: Db, exit_trigger: Arc<AtomicBool>) -> Result<(), Box<dyn Error>> {
+    const OFFSET: &str = "OFFSET";
+    let mut offset = db.read_conf_value(OFFSET).await?;
+    while !exit_trigger.load(std::sync::atomic::Ordering::SeqCst) {
+        match tg_bot.get_updates(offset).await {
+            Ok(updates) => {
+                db.save_updates(&updates).await?;
 
-                for update in &tg_update.updates {
+                for update in &updates {
                     debug!("Update: {:?}", update);
                 }
 
-                tg_update.done_processing();
+                offset = updates.last().map_or(None, |u|Some(u.id + 1));
+                db.write_conf_value(OFFSET, offset).await?;
             }
-            None => {
-                info!("Channel closed");
-                break;
+            Err(e) => {
+                error!("error getting updates from tg: {:?}", e);
+                //tokio::time::sleep(std::time::Duration::from_secs(timeout as u64)).await;
             }
         }
     }

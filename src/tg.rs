@@ -9,18 +9,29 @@ use teloxide::types::AllowedUpdate::*;
 use tokio::sync::{mpsc, oneshot};
 
 pub struct TgBot {
+    update_timeout: u32,
+    retry_timeout: u64,
     bot: Bot,
 }
 
 impl TgBot {
-    pub async fn new<'a>(token: String) -> Result<Self, Box<dyn Error>> {
+    pub async fn new<'a>(token: String, update_timeout: u32, retry_timeout: u64) -> Result<Self, Box<dyn Error>> {
         let bot = Bot::new(token);
         let me = bot.get_me().send().await?;
         info!("I am: {:?}", me.user);
 
         Ok(Self {
             bot,
+            update_timeout,
+            retry_timeout,
         })
+    }
+
+    pub async fn get_updates(&self, offset: Option<i32>) -> ResponseResult<Vec<Update>> {
+        let request = prepare_update_request(&self.bot, self.update_timeout, offset);
+        debug!("requesting updates with offset: {:?}", request.offset);
+
+        request.send().await
     }
 
     pub async fn pull_updates(&self, timeout: u32, sender: mpsc::Sender<TgUpdate>, exit_condition: Arc<AtomicBool>) -> Result<(), Box<dyn Error>> {
@@ -75,8 +86,8 @@ impl TgUpdate {
     }
 }
 
-fn prepare_update_request(bot: &Bot, timeout: u32, offset: Option<i32>) -> JsonRequest<GetUpdates> {
-    let mut request = bot.get_updates().timeout(timeout).allowed_updates(vec![Message,
+fn prepare_update_request(bot: &Bot, lp_timeout: u32, offset: Option<i32>) -> JsonRequest<GetUpdates> {
+    let mut request = bot.get_updates().timeout(lp_timeout).allowed_updates(vec![Message,
                                                                               EditedMessage,
                                                                               ChannelPost,
                                                                               EditedChannelPost,
