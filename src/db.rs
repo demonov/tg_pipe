@@ -58,10 +58,11 @@ impl Db {
 
         match string_value.parse::<T>() {
             Ok(value) => Ok(Some(value)),
-            Err(_) => Err(format!("Error parsing value by key {}", key).into())
+            Err(_) => Err(format!("Error parsing value by key '{}', value: '{}'", key, string_value).into())
         }
 
         //Ok(Some(value))
+
     }
 
     async fn read_conf_value_raw(&self, key: &str) -> Result<Option<String>, Box<dyn Error>> {
