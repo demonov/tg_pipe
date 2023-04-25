@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::time::Duration;
 use tokio::time::sleep;
-use crate::db::Db;
+use crate::db::{ConfKey, Db};
 use crate::tg::TgBot;
 
 mod db;
@@ -60,8 +60,7 @@ async fn run() -> Result<(), Box<dyn Error>> {
 }
 
 async fn process_messages(tg_bot: TgBot, db: Db, exit_trigger: Arc<AtomicBool>, retry_timeout: Duration) -> Result<(), Box<dyn Error>> {
-    const OFFSET: &str = "OFFSET";
-    let mut offset = db.read_conf_value(OFFSET).await?;
+    let mut offset = db.read_conf_value(ConfKey::Offset).await?;
 
     while !exit_trigger.load(std::sync::atomic::Ordering::SeqCst) { //TODO: use cancellation token instead
         match tg_bot.get_updates(offset).await {
@@ -73,7 +72,7 @@ async fn process_messages(tg_bot: TgBot, db: Db, exit_trigger: Arc<AtomicBool>, 
                 }
 
                 offset = updates.last().map_or(None, |u|Some(u.id + 1));
-                db.write_conf_value(OFFSET, offset).await?;
+                db.write_conf_value(ConfKey::Offset, offset).await?;
             }
             Err(e) => {
                 error!("error getting updates from tg: {:?}", e);

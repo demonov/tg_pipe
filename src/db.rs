@@ -30,10 +30,26 @@ pub struct Db {
     pool: Pool<Sqlite>,
 }
 
+pub enum ConfKey {
+    Offset,
+    ChatId,
+}
+
+impl ConfKey {
+    const OFFSET: &'static str = "OFFSET";
+    const CHAT_ID: &'static str = "CHAT_ID";
+
+    fn get_db_key(&self) -> &'static str {
+        match self {
+            ConfKey::Offset => Self::OFFSET,
+            ConfKey::ChatId => Self::CHAT_ID,
+        }
+    }
+}
+
 impl Db {
     pub async fn new(url: String) -> Result<Self, Box<dyn Error>> {
         let url = format!("sqlite://{}", url);
-        //std::env::set_var("DATABASE_URL", &url);
         let pool = SqlitePool::connect(&url).await?;
 
         Ok(Self { pool })
@@ -41,7 +57,11 @@ impl Db {
 
     pub async fn migrate(&self) -> Result<(), Box<dyn Error>> {
         sqlx::query("CREATE TABLE IF NOT EXISTS conf (key TEXT PRIMARY KEY, value TEXT)").execute(&self.pool).await?;
-        sqlx::query("INSERT OR IGNORE INTO conf (key, value) VALUES ('OFFSET', NULL)").execute(&self.pool).await?;
+        sqlx::query(
+            "INSERT OR IGNORE INTO conf (key, value) VALUES \
+            ('OFFSET', NULL), \
+            ('CHAT_ID', NULL) \
+            ").execute(&self.pool).await?;
 
         sqlx::query("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT)").execute(&self.pool).await?;
 
@@ -52,9 +72,10 @@ impl Db {
         Ok(())
     }
 
-    pub async fn read_conf_value<T>(&self, key: &str) -> Result<Option<T>, Box<dyn Error>>
+    pub async fn read_conf_value<T>(&self, key: ConfKey) -> Result<Option<T>, Box<dyn Error>>
         where T: FromStr,
               <T as FromStr>::Err: Error {
+        let key = key.get_db_key();
         let Some(string_value) = self.read_conf_value_raw(key).await? else { return Ok(None); };
 
         match string_value.parse::<T>() {
@@ -76,9 +97,10 @@ impl Db {
         Ok(Some(value.clone()))
     }
 
-    pub async fn write_conf_value<'q, T>(&'q self, key: &'q str, value: Option<T>) -> Result<(), sqlx::Error>
+    pub async fn write_conf_value<'q, T>(&self, key: ConfKey, value: Option<T>) -> Result<(), sqlx::Error>
         where
             T: 'q + Send + sqlx::Encode<'q, Sqlite> + sqlx::Type<Sqlite> {
+        let key = key.get_db_key();
         sqlx::query("UPDATE conf SET value = ? WHERE key = ?")
             .bind(value)
             .bind(key)
@@ -92,7 +114,14 @@ impl Db {
         for update in updates {
             let (id, chat_id, from_id, content, raw) = parse_update(update);
 
-            sqlx::query("INSERT INTO messages (id, chat_id, from_id, content, raw) VALUES (?, ?, ?, ?, ?)").bind(id).bind(chat_id).bind(from_id).bind(content).bind(raw).execute(&self.pool).await?;
+            sqlx::query("INSERT INTO messages (id, chat_id, from_id, content, raw) VALUES (?, ?, ?, ?, ?)")
+                .bind(id)
+                .bind(chat_id)
+                .bind(from_id)
+                .bind(content)
+                .bind(raw)
+                .execute(&self.pool)
+                .await?;
         }
 
         Ok(())
@@ -104,7 +133,10 @@ fn parse_update(update: &Update) -> (i32, i64, Option<String>, Option<String>, O
     let chat_id;
     let from_id;
     let content;
-    let raw = None;//serde_json::to_string(update).unwrap_or("".to_string());
+    let raw = match log::log_enabled!(log::Level::Debug) {
+        true => Some(serde_json::to_string(update).unwrap_or("Error!".to_string())),
+        false => None,
+    };
 
     match &update.kind {
         UpdateKind::Message(message) => {
