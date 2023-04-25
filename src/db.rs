@@ -1,6 +1,6 @@
 use std::error::Error;
 use std::str::FromStr;
-use sqlx::{Pool, Row, sqlite::Sqlite, SqlitePool};
+use sqlx::{Execute, Pool, Row, sqlite::Sqlite, SqlitePool};
 use teloxide::prelude::*;
 use teloxide::types::UpdateKind;
 
@@ -41,6 +41,7 @@ impl Db {
 
     pub async fn migrate(&self) -> Result<(), Box<dyn Error>> {
         sqlx::query("CREATE TABLE IF NOT EXISTS conf (key TEXT PRIMARY KEY, value TEXT)").execute(&self.pool).await?;
+        sqlx::query("INSERT OR IGNORE INTO conf (key, value) VALUES ('OFFSET', NULL)").execute(&self.pool).await?;
 
         sqlx::query("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT)").execute(&self.pool).await?;
 
@@ -62,7 +63,6 @@ impl Db {
         }
 
         //Ok(Some(value))
-
     }
 
     async fn read_conf_value_raw(&self, key: &str) -> Result<Option<String>, Box<dyn Error>> {
@@ -76,15 +76,16 @@ impl Db {
         Ok(Some(value.clone()))
     }
 
-    pub async fn write_conf_value<T>(&self, key: &str, value: Option<T>) -> Result<(), Box<dyn Error>> {
-        unimplemented!()
-        // sqlx::query("REPLACE INTO conf (key, value) VALUES (?, ?)")
-        //     .bind(key)
-        //     .bind(value)
-        //     .execute(&self.pool)
-        //     .await?;
-        //
-        // Ok(())
+    pub async fn write_conf_value<'q, T>(&'q self, key: &'q str, value: Option<T>) -> Result<(), sqlx::Error>
+        where
+            T: 'q + Send + sqlx::Encode<'q, Sqlite> + sqlx::Type<Sqlite> {
+        sqlx::query("UPDATE conf SET value = ? WHERE key = ?")
+            .bind(value)
+            .bind(key)
+            .execute(&self.pool)
+            .await?;
+
+        Ok(())
     }
 
     pub async fn save_updates(&self, updates: &Vec<Update>) -> Result<(), Box<dyn Error>> {
