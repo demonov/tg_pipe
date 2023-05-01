@@ -1,30 +1,23 @@
 use std::error::Error;
 use std::str::FromStr;
-use sqlx::{Execute, Pool, Row, sqlite::Sqlite, SqlitePool};
+use sqlx::{Pool, Row, sqlite::Sqlite, SqlitePool};
 use teloxide::prelude::*;
-use teloxide::types::UpdateKind;
 
-#[derive(Debug, sqlx::FromRow)]
-struct Users {
-    id: i32,
-    name: String,
-}
+mod messages;
 
-struct Permissions {
-    id: i32,
-    user_id: i32,
-    chat_id: i32,
-    is_bot_admin: bool,
-    custom_tag: Option<String>,
-}
-
-#[derive(Debug, sqlx::FromRow)]
-struct Message {
-    id: i32,
-    text: String,
-    chat_id: i32,
-    user_id: i32,
-}
+//#[derive(Debug, sqlx::FromRow)]
+// struct Users {
+//     id: i32,
+//     name: String,
+// }
+//
+// struct Permissions {
+//     id: i32,
+//     user_id: i32,
+//     chat_id: i32,
+//     is_bot_admin: bool,
+//     custom_tag: Option<String>,
+// }
 
 pub struct Db {
     pool: Pool<Sqlite>,
@@ -36,13 +29,10 @@ pub enum ConfKey {
 }
 
 impl ConfKey {
-    const OFFSET: &'static str = "OFFSET";
-    const CHAT_ID: &'static str = "CHAT_ID";
-
     fn get_db_key(&self) -> &'static str {
         match self {
-            ConfKey::Offset => Self::OFFSET,
-            ConfKey::ChatId => Self::CHAT_ID,
+            ConfKey::Offset => "OFFSET",
+            ConfKey::ChatId => "CHAT_ID",
         }
     }
 }
@@ -63,11 +53,9 @@ impl Db {
             ('CHAT_ID', NULL) \
             ").execute(&self.pool).await?;
 
-        sqlx::query("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT)").execute(&self.pool).await?;
+        //sqlx::query("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT)").execute(&self.pool).await?;
 
-        sqlx::query(
-            "CREATE TABLE IF NOT EXISTS messages \
-                (id INTEGER PRIMARY KEY, chat_id INTEGER, from_id TEXT, content TEXT, raw TEXT)").execute(&self.pool).await?;
+        messages::Message::create_table(&self.pool).await?;
 
         Ok(())
     }
@@ -82,8 +70,6 @@ impl Db {
             Ok(value) => Ok(Some(value)),
             Err(_) => Err(format!("Error parsing value by key '{}', value: '{}'", key, string_value).into())
         }
-
-        //Ok(Some(value))
     }
 
     async fn read_conf_value_raw(&self, key: &str) -> Result<Option<String>, Box<dyn Error>> {
@@ -112,45 +98,11 @@ impl Db {
 
     pub async fn save_updates(&self, updates: &Vec<Update>) -> Result<(), Box<dyn Error>> {
         for update in updates {
-            let (id, chat_id, from_id, content, raw) = parse_update(update);
-
-            sqlx::query("INSERT INTO messages (id, chat_id, from_id, content, raw) VALUES (?, ?, ?, ?, ?)")
-                .bind(id)
-                .bind(chat_id)
-                .bind(from_id)
-                .bind(content)
-                .bind(raw)
-                .execute(&self.pool)
-                .await?;
+            let msg = messages::Message::from(update);
+            msg.insert(&self.pool).await?;
         }
 
         Ok(())
     }
 }
 
-fn parse_update(update: &Update) -> (i32, i64, Option<String>, Option<String>, Option<String>) {
-    let id = update.id;
-    let chat_id;
-    let from_id;
-    let content;
-    let raw = match log::log_enabled!(log::Level::Debug) {
-        true => Some(serde_json::to_string(update).unwrap_or("Error!".to_string())),
-        false => None,
-    };
-
-    match &update.kind {
-        UpdateKind::Message(message) => {
-            chat_id = message.chat.id.0;
-            from_id = message.from().map_or(None, |user| Some(user.id.0.to_string()));
-            content = message.text().map_or(None, |text| Some(text.to_string()));
-        }
-        //TODO: handle other update kinds
-        _ => {
-            chat_id = 0;
-            from_id = None;
-            content = None;
-        }
-    }
-
-    (id, chat_id, from_id, content, raw)
-}
