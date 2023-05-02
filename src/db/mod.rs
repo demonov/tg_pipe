@@ -83,6 +83,10 @@ impl Db {
         Ok(())
     }
 
+    pub(crate) async fn set_bot_admin(&self, _user_id: u64) -> Result<Option<String>, Box<dyn Error>> {
+        todo!()
+    }
+
     pub async fn save_updates(&self, updates: &Vec<Update>) -> Result<(), Box<dyn Error>> {
         for update in updates {
             let msg = messages::Message::from(update);

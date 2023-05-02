@@ -53,6 +53,22 @@ async fn run() -> Result<(), Box<dyn Error>> {
     let db = db::Db::new(db).await?;
     db.migrate().await?;
 
+    if cli.reset_offset {
+        info!("Resetting telegram update offset...");
+        db.write_conf_value::<String>(ConfKey::Offset, None).await?;
+    }
+
+    if let Some(chat_id) = cli.chat_id {
+        info!("Setting telegram chat id to {}...", chat_id);
+        db.write_conf_value(ConfKey::ChatId, Some(chat_id.to_string())).await?;
+    }
+
+    if let Some(user_id) = cli.set_bot_admin {
+        info!("Setting user {} as bot admin...", user_id);
+        db.set_bot_admin(user_id).await?;
+    }
+
+
     /*
     let openai_key = get_env("OPENAI_KEY")?;
     let gpt = gpt::Gpt::new("gpt-3.5-turbo".to_string(), openai_key)?;
