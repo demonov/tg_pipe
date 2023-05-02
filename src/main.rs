@@ -1,3 +1,4 @@
+use clap::Parser;
 use log::{debug, error, info};
 use std::env;
 use std::error::Error;
@@ -16,7 +17,6 @@ mod tg;
 async fn main() -> Result<(), Box<dyn Error>> {
     dotenvy::dotenv()?;
     env_logger::init();
-    info!("Starting...");
 
     match run().await {
         Ok(_) => {
@@ -30,7 +30,25 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 }
 
+#[derive(Parser)]
+struct Cli {
+    /// Set telegram Chat Id
+    #[arg(short, value_name = "chat_id")]
+    chat_id: Option<i64>,
+
+    /// Set the user as bot admin
+    #[arg(short('a'), value_name = "user_id")]
+    set_bot_admin: Option<u64>,
+
+    /// Reset telegram update offset
+    #[arg(short('o'))]
+    reset_offset: bool,
+}
+
 async fn run() -> Result<(), Box<dyn Error>> {
+    let cli = Cli::parse();
+
+    info!("Starting...");
     let db = get_env("DB")?;
     let db = db::Db::new(db).await?;
     db.migrate().await?;
@@ -71,7 +89,7 @@ async fn process_messages(tg_bot: TgBot, db: Db, exit_trigger: Arc<AtomicBool>, 
                     debug!("Update: {:?}", update);
                 }
 
-                offset = updates.last().map_or(None, |u|Some(u.id + 1));
+                offset = updates.last().map_or(None, |u| Some(u.id + 1));
                 db.write_conf_value(ConfKey::Offset, offset).await?;
             }
             Err(e) => {
@@ -88,3 +106,4 @@ async fn process_messages(tg_bot: TgBot, db: Db, exit_trigger: Arc<AtomicBool>, 
 fn get_env(key: &str) -> Result<String, String> {
     env::var(key).map_err(|_| format!("Couldn't read environment variable '{}'", key))
 }
+

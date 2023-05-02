@@ -4,20 +4,7 @@ use sqlx::{Pool, Row, sqlite::Sqlite, SqlitePool};
 use teloxide::prelude::*;
 
 mod messages;
-
-//#[derive(Debug, sqlx::FromRow)]
-// struct Users {
-//     id: i32,
-//     name: String,
-// }
-//
-// struct Permissions {
-//     id: i32,
-//     user_id: i32,
-//     chat_id: i32,
-//     is_bot_admin: bool,
-//     custom_tag: Option<String>,
-// }
+mod permissions;
 
 pub struct Db {
     pool: Pool<Sqlite>,
@@ -105,4 +92,3 @@ impl Db {
         Ok(())
     }
 }
-

@@ -63,7 +63,9 @@ impl Message {
 
     pub async fn insert(&self, pool: &SqlitePool) -> Result<SqliteQueryResult, sqlx::Error> {
         sqlx::query(
-            "INSERT INTO messages (update_id, kind, chat_id, message_id, from_id, content, raw) VALUES (?, ?, ?, ?, ?, ?, ?)")
+            "INSERT OR IGNORE INTO messages \
+            (update_id, kind, chat_id, message_id, from_id, content, raw) \
+            VALUES (?, ?, ?, ?, ?, ?, ?)")
             .bind(&self.update_id)
             .bind(&self.kind)
             .bind(&self.chat_id.map_or(None, |chat_id| Some(chat_id.0.to_string())))
