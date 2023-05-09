@@ -50,7 +50,7 @@ async fn run() -> Result<(), Box<dyn Error>> {
 
     info!("Starting...");
     let db = get_env("DB")?;
-    let db = db::Db::new(db).await?;
+    let db = Db::new(db).await?;
     db.migrate().await?;
 
     if cli.reset_offset {
@@ -68,7 +68,6 @@ async fn run() -> Result<(), Box<dyn Error>> {
         db.set_bot_admin(user_id).await?;
     }
 
-
     /*
     let openai_key = get_env("OPENAI_KEY")?;
     let gpt = gpt::Gpt::new("gpt-3.5-turbo".to_string(), openai_key)?;
@@ -83,7 +82,9 @@ async fn run() -> Result<(), Box<dyn Error>> {
     let tg_retry_timeout = get_env("TG_RETRY_TIMEOUT").unwrap_or("5".to_string()).parse::<u64>()?;
     let tg_retry_timeout = Duration::from_secs(tg_retry_timeout);
     info!("Telegram retry timeout has been set to {} seconds", tg_retry_timeout.as_secs());
-    let tg_bot = TgBot::new(token, tg_lp_timeout).await?;
+    let chat_id = db.read_conf_value::<String>(ConfKey::ChatId).await?.ok_or("Chat id is not set")?;
+    let chat_id = chat_id.parse::<i64>()?;
+    let tg_bot = TgBot::new(token, tg_lp_timeout, chat_id).await?;
 
     let exit_condition = Arc::new(AtomicBool::new(false)); //TODO: use cancellation token instead
     futures_util::try_join!(
@@ -107,6 +108,8 @@ async fn process_messages(tg_bot: TgBot, db: Db, exit_trigger: Arc<AtomicBool>, 
 
                 offset = updates.last().map_or(None, |u| Some(u.id + 1));
                 db.write_conf_value(ConfKey::Offset, offset).await?;
+
+
             }
             Err(e) => {
                 error!("error getting updates from tg: {:?}", e);
