@@ -5,8 +5,13 @@ use std::error::Error;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::time::Duration;
+use teloxide::dispatching::dialogue::GetChatId;
+use teloxide::prelude::{ChatId, Update};
+use teloxide::types::UpdateKind;
 use tokio::time::sleep;
+use gpt::Gpt;
 use crate::db::{ConfKey, Db};
+use crate::gpt::ChatMessage;
 use crate::tg::TgBot;
 
 mod db;
@@ -68,13 +73,11 @@ async fn run() -> Result<(), Box<dyn Error>> {
         db.set_bot_admin(user_id).await?;
     }
 
-    /*
+    let prompt = db.read_conf_value::<String>(ConfKey::GptPrompt).await?.ok_or("Prompt is not set")?;
+    let history_capacity = 3; //db.read_conf_value::<usize>(ConfKey::HistoryCapacity).await?.ok_or("History capacity is not set")?;
+
     let openai_key = get_env("OPENAI_KEY")?;
-    let gpt = gpt::Gpt::new("gpt-3.5-turbo".to_string(), openai_key)?;
-    //let gpt = gpt::Gpt::new("gpt-4".to_string(), openai_key)?;
-    let response = gpt.query().await?;
-    info!("response: {}", response);
-    */
+    let gpt = Gpt::new(openai_key,"gpt-3.5-turbo-0301".to_string(), prompt, history_capacity)?; //TODO: make model configurable
 
     let token = get_env("TG_TOKEN")?;
     let tg_lp_timeout = get_env("TG_LONGPOOL_TIMEOUT").unwrap_or("10".to_string()).parse::<u32>()?;
@@ -88,13 +91,13 @@ async fn run() -> Result<(), Box<dyn Error>> {
 
     let exit_condition = Arc::new(AtomicBool::new(false)); //TODO: use cancellation token instead
     futures_util::try_join!(
-        process_messages(tg_bot, db, exit_condition.clone(), tg_retry_timeout),
+        process_messages(tg_bot, db, gpt, exit_condition.clone(), tg_retry_timeout),
     )?;
 
     Ok(())
 }
 
-async fn process_messages(tg_bot: TgBot, db: Db, exit_trigger: Arc<AtomicBool>, retry_timeout: Duration) -> Result<(), Box<dyn Error>> {
+async fn process_messages(tg_bot: TgBot, db: Db, mut gpt:Gpt, exit_trigger: Arc<AtomicBool>, retry_timeout: Duration) -> Result<(), Box<dyn Error>> {
     let mut offset = db.read_conf_value(ConfKey::Offset).await?;
 
     while !exit_trigger.load(std::sync::atomic::Ordering::SeqCst) { //TODO: use cancellation token instead
@@ -106,10 +109,14 @@ async fn process_messages(tg_bot: TgBot, db: Db, exit_trigger: Arc<AtomicBool>, 
                     debug!("Update: {:?}", update);
                 }
 
+                let chat_updates = get_chat_updates(&updates, tg_bot.chat_id);
+                if let Some(response) = gpt.query(chat_updates).await? {
+                    debug!("Response: {}", response);
+                    tg_bot.send_message(tg_bot.chat_id, &response).await?;
+                }
+
                 offset = updates.last().map_or(None, |u| Some(u.id + 1));
                 db.write_conf_value(ConfKey::Offset, offset).await?;
-
-
             }
             Err(e) => {
                 error!("error getting updates from tg: {:?}", e);
@@ -120,6 +127,16 @@ async fn process_messages(tg_bot: TgBot, db: Db, exit_trigger: Arc<AtomicBool>, 
 
     info!("processing messages stopped");
     Ok(())
+}
+
+
+fn get_chat_updates(tg_updates: &Vec<Update>, chat_id: ChatId) -> Vec<ChatMessage> {
+    tg_updates.iter()
+        .filter(|u| u.chat_id() == Some(chat_id))
+        .filter_map(|u| match &u.kind {
+            UpdateKind::Message(m) => Some(m.into()),
+            _ => None})
+        .collect::<Vec<_>>()
 }
 
 fn get_env(key: &str) -> Result<String, String> {

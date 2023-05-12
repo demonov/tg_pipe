@@ -13,6 +13,7 @@ pub struct Db {
 pub enum ConfKey {
     Offset,
     ChatId,
+    GptPrompt
 }
 
 impl ConfKey {
@@ -20,6 +21,7 @@ impl ConfKey {
         match self {
             ConfKey::Offset => "OFFSET",
             ConfKey::ChatId => "CHAT_ID",
+            ConfKey::GptPrompt => "GPT_PROMPT",
         }
     }
 }
@@ -37,7 +39,8 @@ impl Db {
         sqlx::query(
             "INSERT OR IGNORE INTO conf (key, value) VALUES \
             ('OFFSET', NULL), \
-            ('CHAT_ID', NULL) \
+            ('CHAT_ID', NULL), \
+            ('GPT_PROMPT', NULL) \
             ").execute(&self.pool).await?;
 
         //sqlx::query("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT)").execute(&self.pool).await?;
