@@ -1,10 +1,12 @@
 # Build stage: create the binary
 FROM rust:1.69.0 as builder
 WORKDIR /usr/src/build
+RUN rustup target add x86_64-unknown-linux-musl
+RUN cargo install --target x86_64-unknown-linux-musl
 
 COPY . .
 
-RUN cargo build --release
+RUN cargo build --release --target=x86_64-unknown-linux-musl
 
 # Second stage: create the final image
 FROM alpine:3.18.0
