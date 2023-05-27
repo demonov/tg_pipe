@@ -1,5 +1,6 @@
 # Build stage: create the binary
 FROM rust:1.69.0 as builder
+RUN apt-get update && apt install -y openssl
 WORKDIR /usr/src/build
 
 COPY . .
