@@ -8,7 +8,7 @@ RUN cargo build --release
 
 # Second stage: create the final image
 FROM ubuntu:22.04
-RUN apt-get update && apt install -y openssl
+RUN apt-get update && apt install -y libssl-dev
 WORKDIR /app
 
 # Copy the binary from the builder stage
