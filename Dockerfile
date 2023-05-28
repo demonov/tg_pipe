@@ -7,8 +7,7 @@ COPY . .
 RUN cargo build --release
 
 # Second stage: create the final image
-FROM ubuntu:22.04
-RUN apt-get update && apt install -y libssl-dev
+FROM debian:11.7-slim
 WORKDIR /app
 
 # Copy the binary from the builder stage
