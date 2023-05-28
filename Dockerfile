@@ -8,6 +8,7 @@ RUN cargo build --release
 
 # Second stage: create the final image
 FROM debian:11.7-slim
+RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 
 # Copy the binary from the builder stage
