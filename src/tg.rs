@@ -8,11 +8,10 @@ use teloxide::types::AllowedUpdate::*;
 pub struct TgBot {
     lp_timeout: u32,
     bot: Bot,
-    pub chat_id: ChatId,
 }
 
 impl TgBot {
-    pub async fn new<'a>(token: String, lp_timeout: u32, chat_id: i64) -> Result<Self, Box<dyn Error>> {
+    pub async fn new<'a>(token: String, lp_timeout: u32) -> Result<Self, Box<dyn Error>> {
         let bot = Bot::new(token);
         let me = bot.get_me().send().await?;
         info!("I am: {:?}", me.user);
@@ -20,7 +19,6 @@ impl TgBot {
         Ok(Self {
             bot,
             lp_timeout,
-            chat_id: ChatId(chat_id),
         })
     }
 

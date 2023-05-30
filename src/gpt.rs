@@ -2,6 +2,8 @@ use std::collections::VecDeque;
 use std::error::Error;
 use serde::Serialize;
 use openai::chat::{ChatCompletion, ChatCompletionMessage, ChatCompletionMessageRole};
+use teloxide::types::UserId;
+use crate::users::ChatMember;
 
 pub struct Gpt {
     model: String,
@@ -45,7 +47,7 @@ impl Gpt {
             let content = serde_json::to_string(&message.text)?;
             messages.push(ChatCompletionMessage {
                 role: ChatCompletionMessageRole::User,
-                name: message.name.clone(),
+                name: message.user.name.clone(),
                 content,
             });
         }
@@ -60,17 +62,23 @@ impl Gpt {
     }
 }
 
+
+
 pub struct ChatMessage {
-    pub name: Option<String>,
+    pub user: ChatMember,
     pub text: ChatMessageJson,
 }
 
 impl From<&teloxide::types::Message> for ChatMessage {
     fn from(message: &teloxide::types::Message) -> Self {
+
         let name = message.from().map(|user| user.id.to_string());
 
         Self {
-            name,
+            user: ChatMember {
+                id: message.from().map(|user| user.id).unwrap_or(UserId(0)),
+                name,
+            },
             text: message.into(),
         }
     }

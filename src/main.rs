@@ -6,17 +6,19 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::time::Duration;
 use teloxide::dispatching::dialogue::GetChatId;
-use teloxide::prelude::{ChatId, Update};
-use teloxide::types::UpdateKind;
+use teloxide::prelude::*;
+use teloxide::types::{UpdateKind};
 use tokio::time::sleep;
 use gpt::Gpt;
 use crate::db::{ConfKey, Db};
-use crate::gpt::ChatMessage;
+use crate::gpt::{ChatMessage};
 use crate::tg::TgBot;
+use crate::users::{ChatData, ChatMember};
 
 mod db;
 mod gpt;
 mod tg;
+mod users;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -87,18 +89,20 @@ async fn run() -> Result<(), Box<dyn Error>> {
     info!("Telegram retry timeout has been set to {} seconds", tg_retry_timeout.as_secs());
     let chat_id = db.read_conf_value::<String>(ConfKey::ChatId).await?.ok_or("Chat id is not set")?;
     let chat_id = chat_id.parse::<i64>()?;
-    let tg_bot = TgBot::new(token, tg_lp_timeout, chat_id).await?;
+    let tg_bot = TgBot::new(token, tg_lp_timeout).await?;
 
     let exit_condition = Arc::new(AtomicBool::new(false)); //TODO: use cancellation token instead
     futures_util::try_join!(
-        process_messages(tg_bot, db, gpt, exit_condition.clone(), tg_retry_timeout),
+        process_messages(ChatId(chat_id), tg_bot, db, gpt, exit_condition.clone(), tg_retry_timeout),
     )?;
 
     Ok(())
 }
 
-async fn process_messages(tg_bot: TgBot, db: Db, mut gpt:Gpt, exit_trigger: Arc<AtomicBool>, retry_timeout: Duration) -> Result<(), Box<dyn Error>> {
+async fn process_messages(chat_id: ChatId, tg_bot: TgBot, db: Db, mut gpt:Gpt, exit_trigger: Arc<AtomicBool>, retry_timeout: Duration) -> Result<(), Box<dyn Error>> {
+    let mut chat_data = ChatData::new(chat_id);
     let mut offset = db.read_conf_value(ConfKey::Offset).await?;
+
 
     while !exit_trigger.load(std::sync::atomic::Ordering::SeqCst) { //TODO: use cancellation token instead
         match tg_bot.get_updates(offset).await {
@@ -109,10 +113,11 @@ async fn process_messages(tg_bot: TgBot, db: Db, mut gpt:Gpt, exit_trigger: Arc<
                     debug!("Update: {:?}", update);
                 }
 
-                let chat_updates = get_chat_updates(&updates, tg_bot.chat_id);
+                let chat_users = get_chat_users(&updates, chat_id);
+                let chat_updates = get_chat_updates(&updates, chat_id);
                 if let Some(response) = gpt.query(chat_updates).await? {
                     debug!("Response: {}", response);
-                    tg_bot.send_message(tg_bot.chat_id, &response).await?;
+                    tg_bot.send_message(chat_id, &response).await?;
                 }
 
                 offset = updates.last().map_or(None, |u| Some(u.id + 1));
@@ -129,6 +134,12 @@ async fn process_messages(tg_bot: TgBot, db: Db, mut gpt:Gpt, exit_trigger: Arc<
     Ok(())
 }
 
+fn get_chat_users(updates: &Vec<Update>, chat_id: ChatId) -> Vec<ChatMember> {
+    updates.iter()
+        .filter(|&u| u.chat_id() == Some(chat_id))
+        .filter_map(|u| ChatMember::try_from(u).ok())
+        .collect::<Vec<_>>()
+}
 
 fn get_chat_updates(tg_updates: &Vec<Update>, chat_id: ChatId) -> Vec<ChatMessage> {
     tg_updates.iter()
@@ -142,4 +153,3 @@ fn get_chat_updates(tg_updates: &Vec<Update>, chat_id: ChatId) -> Vec<ChatMessag
 fn get_env(key: &str) -> Result<String, String> {
     env::var(key).map_err(|_| format!("Couldn't read environment variable '{}'", key))
 }
-
