@@ -13,12 +13,12 @@ use gpt::Gpt;
 use crate::db::{ConfKey, Db};
 use crate::gpt::{ChatMessage};
 use crate::tg::TgBot;
-use crate::users::{ChatData, ChatMember};
+use crate::chat_data::{ChatData, ChatMember};
 
 mod db;
 mod gpt;
 mod tg;
-mod users;
+mod chat_data;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -76,10 +76,10 @@ async fn run() -> Result<(), Box<dyn Error>> {
     }
 
     let prompt = db.read_conf_value::<String>(ConfKey::GptPrompt).await?.ok_or("Prompt is not set")?;
-    let history_capacity = 3; //db.read_conf_value::<usize>(ConfKey::HistoryCapacity).await?.ok_or("History capacity is not set")?;
+    let history_capacity = 15; //db.read_conf_value::<usize>(ConfKey::HistoryCapacity).await?.ok_or("History capacity is not set")?;
 
     let openai_key = get_env("OPENAI_KEY")?;
-    let gpt = Gpt::new(openai_key,"gpt-3.5-turbo-0301".to_string(), prompt, history_capacity)?; //TODO: make model configurable
+    let gpt = Gpt::new(openai_key, "gpt-3.5-turbo-0301".to_string(), prompt, history_capacity)?; //TODO: make model configurable
 
     let token = get_env("TG_TOKEN")?;
     let tg_lp_timeout = get_env("TG_LONGPOOL_TIMEOUT").unwrap_or("10".to_string()).parse::<u32>()?;
@@ -99,18 +99,23 @@ async fn run() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-async fn process_messages(chat_id: ChatId, tg_bot: TgBot, db: Db, mut gpt:Gpt, exit_trigger: Arc<AtomicBool>, retry_timeout: Duration) -> Result<(), Box<dyn Error>> {
+async fn process_messages(chat_id: ChatId, tg_bot: TgBot, db: Db, mut gpt: Gpt, exit_trigger: Arc<AtomicBool>, retry_timeout: Duration) -> Result<(), Box<dyn Error>> {
     let mut chat_data = ChatData::new(chat_id);
     let mut offset = db.read_conf_value(ConfKey::Offset).await?;
-
 
     while !exit_trigger.load(std::sync::atomic::Ordering::SeqCst) { //TODO: use cancellation token instead
         match tg_bot.get_updates(offset).await {
             Ok(updates) => {
-                db.save_updates(&updates).await?;
+                db.save_updates(&updates).await?; // TODO: add feature flag for enable/disable saving updates
 
                 for update in &updates {
                     debug!("Update: {:?}", update);
+
+                    if update.chat_id() == Some(chat_id) {
+                        if let Some(user) = ChatMember::try_from(update).ok() {
+                            chat_data.update_user(user);
+                        }
+                    }
                 }
 
                 let chat_users = get_chat_users(&updates, chat_id);
@@ -134,19 +139,13 @@ async fn process_messages(chat_id: ChatId, tg_bot: TgBot, db: Db, mut gpt:Gpt, e
     Ok(())
 }
 
-fn get_chat_users(updates: &Vec<Update>, chat_id: ChatId) -> Vec<ChatMember> {
-    updates.iter()
-        .filter(|&u| u.chat_id() == Some(chat_id))
-        .filter_map(|u| ChatMember::try_from(u).ok())
-        .collect::<Vec<_>>()
-}
-
 fn get_chat_updates(tg_updates: &Vec<Update>, chat_id: ChatId) -> Vec<ChatMessage> {
     tg_updates.iter()
         .filter(|u| u.chat_id() == Some(chat_id))
         .filter_map(|u| match &u.kind {
             UpdateKind::Message(m) => Some(m.into()),
-            _ => None})
+            _ => None
+        })
         .collect::<Vec<_>>()
 }
 

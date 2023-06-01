@@ -13,7 +13,7 @@ pub struct ChatMember {
 }
 
 impl ChatMember {
-    pub fn try_from(update: &Update) -> Result<ChatMember, Box<dyn Error>> { // TODO: change error type, use tryFrom trait
+    pub fn try_from(_update: &Update) -> Result<ChatMember, Box<dyn Error>> { // TODO: change error type, use tryFrom trait
         todo!()
     }
 }
@@ -31,7 +31,7 @@ impl ChatData {
         }
     }
 
-    fn update_user(&mut self, user: ChatMember) -> ChannelUserUpdateResult {
+    pub fn update_user(&mut self, user: ChatMember) -> ChannelUserUpdateResult {
         let user_id = user.id;
         match self.users.insert(user_id, user)
         {
@@ -49,9 +49,9 @@ impl ChatData {
 }
 
 
-#[derive(std::fmt::Debug)]
+#[derive(Debug)]
 #[derive(PartialEq)]
-enum ChannelUserUpdateResult {
+pub enum ChannelUserUpdateResult {
     NewEntry,
 
     // contains old user state

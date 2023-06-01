@@ -3,7 +3,7 @@ use std::error::Error;
 use serde::Serialize;
 use openai::chat::{ChatCompletion, ChatCompletionMessage, ChatCompletionMessageRole};
 use teloxide::types::UserId;
-use crate::users::ChatMember;
+use crate::chat_data::ChatMember;
 
 pub struct Gpt {
     model: String,
