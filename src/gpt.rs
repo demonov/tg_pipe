@@ -62,8 +62,6 @@ impl Gpt {
     }
 }
 
-
-
 pub struct ChatMessage {
     pub user: ChatMember,
     pub text: ChatMessageJson,

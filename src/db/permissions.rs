@@ -1,4 +1,4 @@
-use sqlx::{FromRow, SqlitePool};
+use sqlx::{FromRow};
 use teloxide::prelude::*;
 
 #[derive(Debug, FromRow)]
@@ -9,7 +9,7 @@ pub struct Permissions {
 }
 /*
 impl Permissions {
-    pub async fn set_bot_admin(&mut self, _pool: &SqlitePool) -> Result<(), sqlx::Error> {
+    pub async fn set_bot_admin(&mut self, _pool: &sqlx::SqlitePool) -> Result<(), sqlx::Error> {
         self.is_bot_admin = true;
 
         // sqlx::query("INSERT OR IGNORE permissions (user_id, is_bot_admin) VALUES (?, 1)")

@@ -118,7 +118,6 @@ async fn process_messages(chat_id: ChatId, tg_bot: TgBot, db: Db, mut gpt: Gpt, 
                     }
                 }
 
-                let chat_users = get_chat_users(&updates, chat_id);
                 let chat_updates = get_chat_updates(&updates, chat_id);
                 if let Some(response) = gpt.query(chat_updates).await? {
                     debug!("Response: {}", response);
